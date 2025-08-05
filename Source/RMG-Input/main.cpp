@@ -794,10 +794,44 @@ static void simulate_octagon(const double deadzone, const double inputX, const d
 {
     const double maxAxis     = N64_AXIS_PEAK;
     const double maxDiagonal = MAX_DIAGONAL_VALUE;
-    const double maxInputRadius = sqrt(2) * (maxDiagonal + deadzone * (maxAxis - maxDiagonal));
+    //const double maxInputRadius = sqrt(2) * (maxDiagonal + deadzone * (maxAxis - maxDiagonal));
+    const double maxInputRadius = (deadzone + maxDiagonal + sqrt(pow(deadzone + maxDiagonal, 2.0) - 2.0 * sqrt(2.0) * maxDiagonal * deadzone)) / sqrt(2.0);
     // scale to [-maxInputRadius, maxInputRadius]
     double ax = inputX * maxInputRadius;
     double ay = inputY * maxInputRadius;
+    
+    double iL = std::hypot(ax, ay);
+    double iA = atan2(ay, ax);
+    double sNL = 0.919 * maxInputRadius;
+    double mNAD = 3.5 * M_PI / 180.0;
+    if(iL >= sNL) {
+      double a = iA + 2.0 * M_PI;
+      double wA = a;
+      while(wA > M_PI / 4.0) wA -= M_PI / 4.0;
+      if((wA <= 0.0 + mNAD) || (wA >= M_PI / 4.0 - mNAD)) {
+        a += mNAD;
+        a -= fmod(a, M_PI / 4.0);
+        ax = cos(a) * iL;
+        ay = sin(a) * iL;
+      }
+    }
+
+    double magX = std::abs(ax);
+    double magY = std::abs(ay);
+    double v = 0.511 * (maxInputRadius - deadzone) + deadzone;
+    double p = 2.0 * log(sin(M_PI / 2.0 * (v - deadzone) / (maxInputRadius - deadzone))) / log((v - deadzone) / (maxInputRadius - deadzone));
+    if(magX <= deadzone) {
+      magX = 0.0;
+    } else {
+      magX = pow(((magX - deadzone) / (maxInputRadius - deadzone)), (69.0 / 200.0)) * maxInputRadius * pow((sin(((magX - deadzone) / (maxInputRadius - deadzone)) * M_PI / 2.0)), (2.0 * (1.0 - (69.0/200.0)) / p)) / magX;
+    }
+    ax *= magX;
+    if(magY <= deadzone) {
+      magY = 0.0;
+    } else {
+      magY = pow(((magY - deadzone) / (maxInputRadius - deadzone)), (69.0 / 200.0)) * maxInputRadius * pow((sin(((magY - deadzone) / (maxInputRadius - deadzone)) * M_PI / 2.0)), (2.0 * (1.0 - (69.0 / 200.0)) / p)) / magY;
+    }
+    ay *= magY;
 
     // check whether (ax, ay) is within the circle of radius maxInputRadius
     double distance = std::hypot(ax, ay);
@@ -829,6 +863,9 @@ static void simulate_octagon(const double deadzone, const double inputX, const d
     // keep cardinal input within positive and negative bounds of maxAxis
     if (std::abs(ax) > maxAxis) ax = std::copysign(maxAxis, ax);
     if (std::abs(ay) > maxAxis) ay = std::copysign(maxAxis, ay);
+
+    ax = std::copysign(std::abs(ax) + 1e-09, ax);
+    ay = std::copysign(std::abs(ay) + 1e-09, ay);
 
     outputX = static_cast<int>(ax);
     outputY = static_cast<int>(ay);
@@ -1281,7 +1318,7 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys)
     inputY = get_axis_state(profile, &profile->AnalogStick_Down, -1, inputY, useButtonMapping);
     inputX = get_axis_state(profile, &profile->AnalogStick_Left, -1, inputX, useButtonMapping);
     inputX = get_axis_state(profile, &profile->AnalogStick_Right, 1, inputX, useButtonMapping);
-
+    /*
     // take deadzone into account
     const double deadzone = profile->DeadzoneValue / 100.0;
     inputX = apply_deadzone(inputX, deadzone);
@@ -1293,7 +1330,8 @@ EXPORT void CALL GetKeys(int Control, BUTTONS* Keys)
     const double upperInputLimit = std::min(1.0, sensitivityRatio);
     inputX = std::clamp(inputX * sensitivityRatio, lowerInputLimit, upperInputLimit);
     inputY = std::clamp(inputY * sensitivityRatio, lowerInputLimit, upperInputLimit);
-
+    */
+    const double deadzone = 5.5;
     int octagonX = 0, octagonY = 0;
     simulate_octagon(
         deadzone, // deadzone
